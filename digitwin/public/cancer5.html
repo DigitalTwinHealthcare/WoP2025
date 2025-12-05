@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OncoSim | Patient Digital Twin V2.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-dark: #09090b;
+            --panel-dark: #18181b;
+            --accent-blue: #3b82f6;
+            --accent-red: #ef4444;
+            --accent-green: #10b981;
+            --text-main: #e4e4e7;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 4px;
+        }
+
+        /* Custom Toggles */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #3b82f6;
+        }
+
+        .toggle-checkbox:checked+.toggle-label {
+            background-color: #3b82f6;
+        }
+
+        /* Medical Overlay */
+        .scanline {
+            background: linear-gradient(0deg, rgba(0, 0, 0, 0) 0%, rgba(59, 130, 246, 0.05) 50%, rgba(0, 0, 0, 0) 100%);
+            opacity: 0.15;
+            background-size: 100% 4px;
+            pointer-events: none;
+            animation: scan 10s linear infinite;
+        }
+
+        @keyframes scan {
+            from {
+                background-position: 0 0;
+            }
+
+            to {
+                background-position: 0 100%;
+            }
+        }
+
+        @keyframes pulse-red {
+            0% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            }
+        }
+
+        .live-indicator {
+            animation: pulse-red 2s infinite;
+        }
+    </style>
+</head>
+
+<body class="antialiased h-screen flex flex-col">
+
+    <!-- Header -->
+    <header
+        class="border-b border-zinc-800 bg-zinc-900/90 backdrop-blur-md px-6 h-14 flex items-center justify-between shrink-0 z-20">
+        <div class="flex items-center gap-3">
+            <div class="w-1.5 h-6 bg-blue-600 rounded-sm"></div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-white leading-none">ONCO<span
+                        class="text-blue-500">TWIN</span> <span class="text-xs text-zinc-500 font-normal">V2.0</span>
+                </h1>
+                <div class="text-[9px] text-zinc-500 font-mono tracking-wider">PATIENT DIGITAL TWIN | ID: PT-8829-X
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2 bg-zinc-800/50 px-3 py-1 rounded border border-zinc-700/50">
+                <span class="text-[10px] text-zinc-400 uppercase font-bold">Live AQI Source</span>
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 live-indicator"></span>
+                <span id="aqiSourceText" class="text-[10px] font-mono text-emerald-400">OPEN-METEO API</span>
+            </div>
+            <div id="simStatus" class="flex items-center gap-2 px-3 py-1 bg-zinc-800 rounded border border-zinc-700">
+                <div class="w-2 h-2 rounded-full bg-zinc-600" id="statusDot"></div>
+                <span id="statusText" class="text-xs font-mono text-zinc-400">READY</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Controls & Inputs -->
+    <section class="bg-zinc-900 border-b border-zinc-800 p-3 shrink-0 z-10 grid grid-cols-12 gap-4">
+
+        <!-- Patient Profile -->
+        <div class="col-span-3 border-r border-zinc-800 pr-4">
+            <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1">1. Patient & Tumor Profile</label>
+            <div class="grid grid-cols-2 gap-2 mb-2">
+                <select id="stageSelect"
+                    class="bg-black border border-zinc-700 rounded text-xs text-white p-1.5 focus:border-blue-500 outline-none">
+                    <option value="1B">Stage IB</option>
+                    <option value="2B">Stage IIB</option>
+                    <option value="3A">Stage IIIA</option>
+                </select>
+                <div class="flex items-center justify-between bg-black border border-zinc-700 rounded px-2">
+                    <span class="text-[10px] text-zinc-400">Smoker</span>
+                    <label class="relative inline-flex items-center cursor-pointer scale-75 origin-right">
+                        <input type="checkbox" id="smokerToggle" class="sr-only peer"
+                            onchange="window.updateMetricsDisplay()">
+                        <div
+                            class="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600">
+                        </div>
+                    </label>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <input type="number" id="initDiameter"
+                    class="bg-black border border-zinc-700 rounded text-xs text-white p-1.5 text-right" value="20"
+                    placeholder="Size (mm)">
+                <div class="flex items-center gap-1 bg-black border border-zinc-700 rounded px-1">
+                    <input type="number" id="simDuration"
+                        class="bg-transparent w-full text-xs text-white text-right outline-none" value="24">
+                    <span class="text-[9px] text-zinc-500 pr-1">Mths</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Environment -->
+        <div class="col-span-3 border-r border-zinc-800 pr-4">
+            <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1">2. Environment (Live API)</label>
+            <select id="citySelect"
+                class="w-full bg-black border border-zinc-700 rounded text-xs text-white p-1.5 mb-2 focus:border-emerald-500 outline-none"
+                onchange="window.fetchLiveAQI()">
+                <option value="28.61,77.20">Delhi (NCR)</option>
+                <option value="19.07,72.87">Mumbai (Maharashtra)</option>
+                <option value="12.97,77.59">Bangalore (Karnataka)</option>
+                <option value="13.08,80.27">Chennai (Tamil Nadu)</option>
+                <option value="22.57,88.36">Kolkata (West Bengal)</option>
+            </select>
+            <div class="flex items-center justify-between bg-zinc-800/50 rounded px-2 py-1">
+                <span class="text-[10px] text-zinc-400">Current US AQI</span>
+                <span id="liveAQIVal" class="text-xs font-bold text-white font-mono">--</span>
+            </div>
+        </div>
+
+        <!-- Interventions (Real-time) -->
+        <div class="col-span-4 pr-4">
+            <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1">3. Therapeutics (Clinical
+                Interventions)</label>
+            <div class="flex gap-2">
+                <!-- Diet Toggle -->
+                <button id="btnDiet" onclick="window.toggleIntervention('diet')"
+                    class="flex-1 border border-zinc-700 rounded p-1.5 text-left hover:bg-zinc-800 transition group">
+                    <div class="text-[9px] text-zinc-500 uppercase group-hover:text-zinc-300">Anti-Inflammatory</div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] text-zinc-400 font-mono status-text">OFF</span>
+                        <div class="w-2 h-2 rounded-full bg-zinc-600 status-dot"></div>
+                    </div>
+                </button>
+                <!-- Oxygen Toggle -->
+                <button id="btnO2" onclick="window.toggleIntervention('o2')"
+                    class="flex-1 border border-zinc-700 rounded p-1.5 text-left hover:bg-zinc-800 transition group">
+                    <div class="text-[9px] text-zinc-500 uppercase group-hover:text-zinc-300">Hyperbaric O2</div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] text-zinc-400 font-mono status-text">OFF</span>
+                        <div class="w-2 h-2 rounded-full bg-zinc-600 status-dot"></div>
+                    </div>
+                </button>
+                <!-- Chemo Toggle -->
+                <button id="btnChemo" onclick="window.toggleIntervention('chemo')"
+                    class="flex-1 border border-zinc-700 rounded p-1.5 text-left hover:bg-zinc-800 transition group">
+                    <div class="text-[9px] text-zinc-500 uppercase group-hover:text-zinc-300">Cytotoxic Chemo</div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] text-zinc-400 font-mono status-text">OFF</span>
+                        <div class="w-2 h-2 rounded-full bg-zinc-600 status-dot"></div>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="col-span-2 flex flex-col gap-2 justify-end">
+            <div class="flex gap-1">
+                <button onclick="window.startSimulation()"
+                    class="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold py-2 rounded shadow transition flex items-center justify-center gap-1">
+                    START
+                </button>
+                <button onclick="window.togglePause()" id="btnPause"
+                    class="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] font-bold py-2 rounded shadow transition flex items-center justify-center gap-1">
+                    PAUSE
+                </button>
+            </div>
+            <button onclick="window.resetSimulation()"
+                class="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-[10px] py-1.5 rounded border border-zinc-700 transition">
+                RESET
+            </button>
+        </div>
+
+    </section>
+
+    <!-- Main Viewport -->
+    <main class="flex-1 w-full max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0 overflow-hidden">
+
+        <!-- Left: Histopathology Visualizer -->
+        <div class="relative bg-black rounded-xl border border-zinc-800 shadow-2xl flex flex-col overflow-hidden group">
+
+            <canvas id="mainCanvas" class="flex-1 w-full h-full object-cover cursor-crosshair"></canvas>
+
+            <!-- Scanline Overlay -->
+            <div class="absolute inset-0 scanline"></div>
+
+            <!-- HUD Top Left -->
+            <div class="absolute top-4 left-4 pointer-events-none">
+                <div class="bg-black/60 backdrop-blur border border-zinc-700/50 rounded p-3">
+                    <div class="text-[10px] text-zinc-400 font-mono uppercase tracking-wider mb-1">Virtual Biopsy (40x)
+                    </div>
+                    <div class="text-3xl font-bold text-white font-mono leading-none" id="hudSize">--<span
+                            class="text-sm font-normal text-zinc-500 ml-1">mm</span></div>
+                    <div class="text-[10px] text-zinc-500 mt-1 font-mono">Volume: <span id="hudVol"
+                            class="text-zinc-300">--</span> cm³</div>
+                    <div class="flex items-center gap-2 mt-2 pt-2 border-t border-zinc-800">
+                        <span class="text-[9px] text-blue-400 font-mono" id="hudCells">-- Cells</span>
+                        <span class="text-[9px] text-zinc-600">|</span>
+                        <span class="text-[9px] text-emerald-400 font-mono" id="hudMitosis">Mitotic Idx: --</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Danger Alert -->
+            <div id="alertBox"
+                class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-950/95 border-2 border-red-500 p-6 rounded-lg text-center backdrop-blur shadow-[0_0_50px_rgba(239,68,68,0.5)] z-50 min-w-[300px]">
+                <div class="text-5xl mb-2">⚠️</div>
+                <div class="text-red-500 font-bold text-xl animate-pulse tracking-widest uppercase">Critical Threshold
+                </div>
+                <div class="text-red-200 text-sm font-mono mt-2 leading-relaxed">Tumor burden has exceeded safe clinical
+                    limits (100mm+). <br>Immediate intervention required.</div>
+                <div class="mt-4 text-[10px] text-red-400 border-t border-red-900 pt-2">SIMULATION HALTED</div>
+            </div>
+        </div>
+
+        <!-- Right: Real-time Data -->
+        <div class="flex flex-col gap-4 min-h-0">
+
+            <!-- Graph -->
+            <div class="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col min-h-0 relative">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wide">Tumor Kinetics Projection</h3>
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2 h-2 bg-blue-500 rounded-full"></span>
+                            <span class="text-[9px] text-zinc-500">Vol (cm³)</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2 h-2 bg-red-500 rounded-full"></span>
+                            <span class="text-[9px] text-zinc-500">Threshold</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex-1 w-full min-h-0">
+                    <canvas id="chartCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Metrics Console -->
+            <div
+                class="h-1/3 min-h-[160px] bg-zinc-900 border border-zinc-800 rounded-xl p-4 grid grid-cols-2 gap-4 shrink-0">
+
+                <!-- Clinical Factors -->
+                <div class="space-y-3">
+                    <div class="border-b border-zinc-800 pb-2">
+                        <div class="text-[9px] text-zinc-500 uppercase tracking-wide mb-1">Growth Velocity</div>
+                        <div id="valVelocity" class="text-lg font-mono text-white font-bold">-- <span
+                                class="text-xs font-normal text-zinc-500">mm/day</span></div>
+                    </div>
+                    <div class="border-b border-zinc-800 pb-2">
+                        <div class="text-[9px] text-zinc-500 uppercase tracking-wide mb-1">Est. Doubling Time</div>
+                        <div id="valDT" class="text-lg font-mono text-blue-400 font-bold">-- <span
+                                class="text-xs font-normal text-zinc-500">Days</span></div>
+                    </div>
+                </div>
+
+                <!-- Modifiers -->
+                <div class="space-y-3">
+                    <div class="border-b border-zinc-800 pb-2">
+                        <div class="text-[9px] text-zinc-500 uppercase tracking-wide mb-1">Inflammatory Load (Smoke+AQI)
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-full h-1.5 bg-zinc-800 rounded overflow-hidden">
+                                <div id="barInflammation" class="h-full bg-red-500 w-0 transition-all duration-500">
+                                </div>
+                            </div>
+                            <span id="valEnv" class="text-xs font-mono text-red-400 w-10 text-right">--</span>
+                        </div>
+                    </div>
+                    <div class="border-b border-zinc-800 pb-2">
+                        <div class="text-[9px] text-zinc-500 uppercase tracking-wide mb-1">Therapeutic Efficacy</div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-full h-1.5 bg-zinc-800 rounded overflow-hidden">
+                                <div id="barSuppression" class="h-full bg-emerald-500 w-0 transition-all duration-500">
+                                </div>
+                            </div>
+                            <span id="valLifestyle" class="text-xs font-mono text-emerald-400 w-10 text-right">0%</span>
+                        </div>
+                    </div>
+                    <div class="pt-1">
+                        <div class="text-[9px] text-zinc-500 uppercase tracking-wide">Net Effect</div>
+                        <div id="valNetEffect" class="text-xs font-mono text-zinc-300">STABLE</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        (function () {
+            const PI = Math.PI;
+
+            // --- State Management ---
+            const State = {
+                isRunning: false,
+                isPaused: false,
+                day: 0,
+                currentDiameter: 20,
+                currentVolume: 0,
+                maxDiameter: 140,
+
+                // Clinical Inputs
+                baseDT: 150,
+                aqiValue: 0,
+                smoker: false,
+                simDurationMonths: 24,
+
+                // Active Interventions
+                mods: {
+                    diet: false,  // Cytostatic: Slows growth
+                    o2: false,    // Cytostatic: Slows growth
+                    chemo: false  // Cytotoxic: Kills cells
+                },
+
+                // Visuals
+                angiogenesis: [],
+
+                // Constants
+                killRate: 0.02 // Daily fractional kill rate for chemo
+            };
+
+            // --- References ---
+            const canvas = document.getElementById('mainCanvas');
+            const ctx = canvas.getContext('2d');
+            let chartInstance = null;
+            let animFrame = null;
+            let lastTime = 0;
+
+            // --- 1. API Integration ---
+            window.fetchLiveAQI = async function () {
+                const sel = document.getElementById('citySelect').value;
+                const [lat, lon] = sel.split(',');
+                const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`;
+                const display = document.getElementById('liveAQIVal');
+
+                display.innerHTML = '<span class="animate-pulse">...</span>';
+
+                try {
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    const aqi = data.current.us_aqi;
+                    State.aqiValue = aqi;
+
+                    let colorClass = "text-emerald-400";
+                    if (aqi > 100) colorClass = "text-yellow-400";
+                    if (aqi > 150) colorClass = "text-red-500";
+
+                    display.innerText = `${aqi} AQI`;
+                    display.className = `text-xs font-bold font-mono ${colorClass}`;
+                    window.updateMetricsDisplay();
+                } catch (e) {
+                    display.innerText = "N/A";
+                    State.aqiValue = 50;
+                }
+            };
+
+            // --- 2. Mathematical Model (Gompertz-Kill) ---
+            const diaToVol = (d) => (4 / 3) * PI * Math.pow((d / 2) / 10, 3);
+            const volToDia = (v) => Math.pow((3 * v) / (4 * PI), 1 / 3) * 20;
+
+            function calculateStep(deltaTimeDays) {
+                if (State.currentDiameter >= 200) return; // Cap at physically impossible size
+
+                // 1. Inflammatory Load (Promoters)
+                // AQI: 0-500. Normalize so max AQI adds ~20% aggression.
+                const aqiFactor = State.aqiValue / 2000;
+                // Smoking: Adds significant inflammation (30%)
+                const smokeFactor = State.smoker ? 0.30 : 0;
+                const inflammation = aqiFactor + smokeFactor;
+
+                // 2. Cytostatic Factors (Slowing Growth)
+                // Diet (15%) + Oxygen (20%)
+                let suppression = 0;
+                if (State.mods.diet) suppression += 0.15;
+                if (State.mods.o2) suppression += 0.20;
+
+                // 3. Net Growth Coefficient
+                // Gompertz alpha adjustment. 
+                // Base Alpha = ln(2)/DT. 
+                // New Alpha = Base * (1 + Inflammation - Suppression)
+                // We floor growth factor at 0.1 (can't stop biological time completely without chemo)
+                const growthMultiplier = Math.max(0.1, 1 + inflammation - suppression);
+
+                // 4. Differential Equation
+                // dV = (Growth Term) - (Kill Term)
+                const K = diaToVol(State.maxDiameter); // Carrying capacity volume
+                const V = State.currentVolume;
+
+                // Gompertz Growth Component
+                const alphaBase = Math.log(2) / State.baseDT;
+                const alphaEffective = alphaBase * growthMultiplier;
+                const growthRate = alphaEffective * V * Math.log(K / V); // dV/dt (growth)
+
+                // Cytotoxic Kill Component (Chemo)
+                // Log-cell kill: Kill is proportional to volume
+                let killRate = 0;
+                if (State.mods.chemo) {
+                    killRate = State.killRate * V; // dV/dt (death)
+                }
+
+                // Net Change
+                const dV = (growthRate - killRate) * deltaTimeDays;
+
+                State.currentVolume += dV;
+
+                // Clamp min volume (can't disappear completely in this model)
+                if (State.currentVolume < 0.001) State.currentVolume = 0.001;
+
+                State.currentDiameter = volToDia(State.currentVolume);
+                State.day += deltaTimeDays;
+
+                window.updateMetricsDisplay(inflammation, suppression, dV);
+            }
+
+            window.updateMetricsDisplay = function (inf = 0, sup = 0, dV = 0) {
+                // Only recalc helpers if not passed from loop
+                if (arguments.length === 0) {
+                    const aqiFactor = State.aqiValue / 2000;
+                    const smokeFactor = document.getElementById('smokerToggle').checked ? 0.30 : 0;
+                    inf = aqiFactor + smokeFactor;
+
+                    let s = 0;
+                    if (State.mods.diet) s += 0.15;
+                    if (State.mods.o2) s += 0.20;
+                    sup = s;
+                }
+
+                // Bars
+                document.getElementById('barInflammation').style.width = `${Math.min(100, inf * 200)}%`;
+                document.getElementById('barSuppression').style.width = `${Math.min(100, sup * 200)}%`;
+
+                document.getElementById('valEnv').innerText = `+${(inf * 100).toFixed(1)}%`;
+                document.getElementById('valLifestyle').innerText = `-${(sup * 100).toFixed(0)}%`;
+
+                // Net Effect Text
+                const elNet = document.getElementById('valNetEffect');
+                if (State.mods.chemo) {
+                    elNet.innerText = "REGRESSING (CYTOTOXIC)";
+                    elNet.className = "text-xs font-mono text-emerald-400 font-bold animate-pulse";
+                } else if (dV > 0.01) {
+                    elNet.innerText = "PROGRESSING";
+                    elNet.className = "text-xs font-mono text-red-400 font-bold";
+                } else {
+                    elNet.innerText = "STABLE / SLOW";
+                    elNet.className = "text-xs font-mono text-yellow-400";
+                }
+
+                // Physics
+                document.getElementById('hudSize').innerHTML = `${State.currentDiameter.toFixed(1)}<span class="text-sm font-normal text-zinc-500 ml-1">mm</span>`;
+                document.getElementById('hudVol').innerText = State.currentVolume.toFixed(2);
+
+                const cells = (State.currentVolume * 1e8).toExponential(1);
+                document.getElementById('hudCells').innerText = `${cells.replace('e+', 'e')} Cells`;
+
+                // DT & Velocity
+                const currentFactor = 1 + inf - sup;
+                const instDT = State.baseDT / Math.max(0.01, currentFactor);
+                document.getElementById('valDT').innerText = State.mods.chemo ? "N/A (Kill)" : `${instDT.toFixed(0)} d`;
+
+                const vel = (State.currentDiameter * 0.005 * currentFactor).toFixed(2);
+                document.getElementById('valVelocity').innerText = State.mods.chemo ? "-" + vel : vel;
+                document.getElementById('hudMitosis').innerText = `Mitotic: ${(10 * currentFactor).toFixed(1)}`;
+            };
+
+            // --- 3. Animation Loop ---
+            function loop(timestamp) {
+                if (!State.isRunning || State.isPaused) {
+                    if (State.isPaused) lastTime = timestamp; // Keep delta 0 while paused
+                    animFrame = requestAnimationFrame(loop);
+                    return;
+                }
+
+                const dt = timestamp - lastTime;
+                lastTime = timestamp;
+
+                // Simulation Speed: 1 sec = 10 days
+                const simSpeed = 10;
+                const deltaDays = (dt / 1000) * simSpeed;
+
+                calculateStep(deltaDays);
+                renderCanvas();
+                updateChart();
+
+                // End Conditions
+                const maxDays = State.simDurationMonths * 30;
+
+                // Danger Threshold (100mm)
+                if (State.currentDiameter >= 100) {
+                    State.isRunning = false;
+                    State.isPaused = true;
+                    document.getElementById('alertBox').classList.remove('hidden');
+                    document.getElementById('statusText').innerText = "CRITICAL";
+                    document.getElementById('statusDot').className = "w-2 h-2 rounded-full bg-red-600 animate-ping";
+                    return;
+                }
+
+                if (State.day >= maxDays) {
+                    State.isRunning = false;
+                    document.getElementById('statusText').innerText = "COMPLETED";
+                    document.getElementById('statusDot').className = "w-2 h-2 rounded-full bg-blue-500";
+                    return;
+                }
+
+                animFrame = requestAnimationFrame(loop);
+            }
+
+            // --- 4. Visuals ---
+            function initVisuals() {
+                State.angiogenesis = [];
+                for (let i = 0; i < 15; i++) {
+                    State.angiogenesis.push({
+                        angle: (i / 15) * PI * 2,
+                        length: Math.random() * 40 + 40,
+                        tortuosity: Math.random() * 10
+                    });
+                }
+            }
+
+            function drawStandbyScreen() {
+                if (canvas.width !== canvas.parentElement.offsetWidth) {
+                    canvas.width = canvas.parentElement.offsetWidth;
+                    canvas.height = canvas.parentElement.offsetHeight;
+                }
+                const w = canvas.width;
+                const h = canvas.height;
+                ctx.fillStyle = '#09090b';
+                ctx.fillRect(0, 0, w, h);
+
+                // Grid
+                ctx.strokeStyle = '#18181b';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                for (let i = 0; i < w; i += 50) { ctx.moveTo(i, 0); ctx.lineTo(i, h); }
+                for (let i = 0; i < h; i += 50) { ctx.moveTo(0, i); ctx.lineTo(w, i); }
+                ctx.stroke();
+
+                ctx.fillStyle = '#3f3f46';
+                ctx.font = '12px "Inter", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText("DIGITAL TWIN OFFLINE // AWAITING ACTIVATION", w / 2, h / 2);
+            }
+
+            function renderCanvas() {
+                // Size Check
+                if (canvas.width !== canvas.parentElement.offsetWidth) {
+                    canvas.width = canvas.parentElement.offsetWidth;
+                    canvas.height = canvas.parentElement.offsetHeight;
+                }
+                const w = canvas.width;
+                const h = canvas.height;
+                const cx = w / 2;
+                const cy = h / 2;
+
+                // Clear
+                ctx.fillStyle = '#09090b';
+                ctx.fillRect(0, 0, w, h);
+
+                // Tissue Grid (Background)
+                ctx.strokeStyle = '#18181b';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                for (let i = 0; i < w; i += 50) { ctx.moveTo(i, 0); ctx.lineTo(i, h); }
+                for (let i = 0; i < h; i += 50) { ctx.moveTo(0, i); ctx.lineTo(w, i); }
+                ctx.stroke();
+
+                // Render Tumor
+                const pxPerMm = Math.min(w, h) / 100;
+                const r = (State.currentDiameter / 2) * pxPerMm;
+
+                ctx.save();
+                ctx.translate(cx, cy);
+
+                // Vessels (Angiogenesis) - Grow/Shrink with tumor
+                State.angiogenesis.forEach(v => {
+                    const growthFactor = Math.min(1.2, State.currentDiameter / 30);
+                    const len = v.length * growthFactor;
+
+                    // Vessels retract if chemo is effective (anti-angiogenic effect implied)
+                    const retraction = State.mods.chemo ? 0.8 : 1.0;
+
+                    const x1 = Math.cos(v.angle) * (r + len * retraction);
+                    const y1 = Math.sin(v.angle) * (r + len * retraction);
+                    const x2 = Math.cos(v.angle) * (r * 0.9); // Penetrate surface
+                    const y2 = Math.sin(v.angle) * (r * 0.9);
+
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.quadraticCurveTo(
+                        (x1 + x2) / 2 + Math.random() * 5,
+                        (y1 + y2) / 2 + Math.random() * 5,
+                        x2, y2
+                    );
+                    ctx.strokeStyle = `rgba(220, 38, 38, ${0.4 * growthFactor})`;
+                    ctx.lineWidth = 2 * growthFactor;
+                    ctx.stroke();
+                });
+
+                // Tumor Mass
+                ctx.beginPath();
+                // Shape jitter based on aggression
+                const aggression = (State.aqiValue / 2000) + (State.smoker ? 0.3 : 0);
+                for (let i = 0; i <= 60; i++) {
+                    const ang = (i / 60) * PI * 2;
+                    const noise = Math.sin(ang * 10 + State.day * 0.1) * (r * (0.05 + aggression * 0.1));
+                    const rad = r + noise;
+                    const x = Math.cos(ang) * rad;
+                    const y = Math.sin(ang) * rad;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+
+                // Color: Shifts based on state
+                const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+                if (State.mods.chemo) {
+                    // Necrotic/Grayish look for responding tumor
+                    grad.addColorStop(0, '#1f2937');
+                    grad.addColorStop(0.8, '#4b5563');
+                    grad.addColorStop(1, '#9ca3af');
+                } else {
+                    // Active Red/Blue
+                    grad.addColorStop(0, '#172554'); // Hypoxic Core
+                    grad.addColorStop(0.6, '#991b1b'); // Active
+                    grad.addColorStop(1, '#ef4444'); // Proliferative Rim
+                }
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                // Cellular Texture
+                ctx.globalCompositeOperation = 'overlay';
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                const spots = Math.floor(r * 2);
+                for (let i = 0; i < spots; i++) {
+                    const dist = Math.random() * r;
+                    const ang = Math.random() * PI * 2;
+                    ctx.beginPath();
+                    ctx.arc(Math.cos(ang) * dist, Math.sin(ang) * dist, Math.random() * 2, 0, PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalCompositeOperation = 'source-over';
+
+                ctx.restore();
+            }
+
+            // --- 5. Charting ---
+            function initChart() {
+                const ctxChart = document.getElementById('chartCanvas').getContext('2d');
+                if (chartInstance) chartInstance.destroy();
+
+                chartInstance = new Chart(ctxChart, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: 'Volume (cm³)',
+                                data: [],
+                                borderColor: '#3b82f6',
+                                borderWidth: 2,
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                fill: true,
+                                pointRadius: 0,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Threshold',
+                                data: [],
+                                borderColor: '#ef4444',
+                                borderWidth: 1,
+                                borderDash: [5, 5],
+                                pointRadius: 0,
+                                fill: false
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { display: false, color: '#333' }, ticks: { color: '#666', maxTicksLimit: 6 } },
+                            y: { grid: { color: '#333' }, ticks: { color: '#666' }, min: 0 }
+                        }
+                    }
+                });
+            }
+
+            function updateChart() {
+                if (Math.floor(State.day) % 2 === 0) { // Update frequently for smooth chemo curves
+                    chartInstance.data.labels.push(State.day.toFixed(0));
+                    chartInstance.data.datasets[0].data.push(State.currentVolume);
+                    chartInstance.data.datasets[1].data.push(diaToVol(100)); // Danger line
+
+                    // Auto-scroll
+                    if (chartInstance.data.labels.length > 200) {
+                        chartInstance.data.labels.shift();
+                        chartInstance.data.datasets[0].data.shift();
+                        chartInstance.data.datasets[1].data.shift();
+                    }
+                    chartInstance.update();
+                }
+            }
+
+            // --- 6. Handlers ---
+            window.toggleIntervention = function (type) {
+                State.mods[type] = !State.mods[type];
+
+                const btn = document.getElementById(type === 'diet' ? 'btnDiet' : type === 'o2' ? 'btnO2' : 'btnChemo');
+                const dot = btn.querySelector('.status-dot');
+                const txt = btn.querySelector('.status-text');
+
+                if (State.mods[type]) {
+                    btn.classList.add('border-blue-500', 'bg-blue-900/20');
+                    dot.classList.remove('bg-zinc-600');
+                    dot.classList.add('bg-blue-400', 'shadow-[0_0_8px_rgba(96,165,250,0.8)]');
+                    txt.innerText = "ACTIVE";
+                    txt.classList.add('text-blue-400');
+                } else {
+                    btn.classList.remove('border-blue-500', 'bg-blue-900/20');
+                    dot.classList.add('bg-zinc-600');
+                    dot.classList.remove('bg-blue-400', 'shadow-[0_0_8px_rgba(96,165,250,0.8)]');
+                    txt.innerText = "OFF";
+                    txt.classList.remove('text-blue-400');
+                }
+                window.updateMetricsDisplay();
+            };
+
+            window.togglePause = function () {
+                if (!State.isRunning) return;
+                State.isPaused = !State.isPaused;
+                const btn = document.getElementById('btnPause');
+                btn.innerText = State.isPaused ? "RESUME" : "PAUSE";
+                btn.className = State.isPaused
+                    ? "flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-2 rounded shadow transition flex items-center justify-center gap-1"
+                    : "flex-1 bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] font-bold py-2 rounded shadow transition flex items-center justify-center gap-1";
+            };
+
+            window.startSimulation = function () {
+                if (State.isRunning) return;
+
+                // Init State
+                State.smoker = document.getElementById('smokerToggle').checked;
+                State.simDurationMonths = parseInt(document.getElementById('simDuration').value) || 24;
+                State.currentDiameter = parseFloat(document.getElementById('initDiameter').value) || 20;
+                State.currentVolume = diaToVol(State.currentDiameter);
+                State.day = 0;
+
+                // Reset Visuals
+                document.getElementById('alertBox').classList.add('hidden');
+                initChart();
+                initVisuals();
+
+                State.isRunning = true;
+                State.isPaused = false;
+                document.getElementById('statusText').innerText = "RUNNING";
+                document.getElementById('statusDot').className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+                document.getElementById('btnPause').innerText = "PAUSE";
+
+                lastTime = performance.now();
+                animFrame = requestAnimationFrame(loop);
+            };
+
+            window.resetSimulation = function () {
+                State.isRunning = false;
+                State.isPaused = false;
+                cancelAnimationFrame(animFrame);
+
+                // UI Reset
+                State.mods.diet = false; State.mods.o2 = false; State.mods.chemo = false;
+                document.querySelectorAll('button[id^="btn"]').forEach(b => {
+                    if (b.id === 'btnPause') return;
+                    b.classList.remove('border-blue-500', 'bg-blue-900/20');
+                    b.querySelector('.status-dot').className = "w-2 h-2 rounded-full bg-zinc-600 status-dot";
+                    b.querySelector('.status-text').innerText = "OFF";
+                    b.querySelector('.status-text').classList.remove('text-blue-400');
+                });
+
+                document.getElementById('statusText').innerText = "READY";
+                document.getElementById('statusDot').className = "w-2 h-2 rounded-full bg-zinc-600";
+                document.getElementById('alertBox').classList.add('hidden');
+
+                // Recalc initial visual state
+                State.currentDiameter = parseFloat(document.getElementById('initDiameter').value) || 20;
+                State.currentVolume = diaToVol(State.currentDiameter);
+                window.updateMetricsDisplay();
+                drawStandbyScreen();
+                initChart();
+            };
+
+            // --- Init ---
+            window.onload = function () {
+                window.fetchLiveAQI();
+                window.updateMetricsDisplay();
+                initVisuals();
+                drawStandbyScreen();
+                initChart();
+            };
+
+        })();
+    </script>
+</body>
+
+</html>

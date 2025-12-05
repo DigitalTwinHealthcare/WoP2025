@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioTwin - Medical Digital Twin Interface</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Import Map: Defines where to find modules -->
+    <script type="importmap">
+        {
+            "imports": {
+                "react": "https://esm.sh/react@18.2.0",
+                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+                "three": "https://esm.sh/three@0.160.0",
+                "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.15.12?external=react,react-dom,three",
+                "@react-three/drei": "https://esm.sh/@react-three/drei@9.96.1?external=react,react-dom,three,@react-three/fiber",
+                "framer-motion": "https://esm.sh/framer-motion@10.16.4?external=react,react-dom",
+                "lucide-react": "https://esm.sh/lucide-react@0.303.0?external=react,react-dom"
+            }
+        }
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            overflow-x: hidden;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useRef, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import * as THREE from 'three';
+        import { Canvas, useFrame } from '@react-three/fiber';
+        import { Float, Environment, MeshDistortMaterial, Sparkles, Text } from '@react-three/drei';
+        import { motion, AnimatePresence } from 'framer-motion';
+        import { Upload, FileText, ArrowLeft, Activity, Brain, Bone, Wind } from 'lucide-react';
+
+        // --- 3D COMPONENTS ---
+
+        // 1. Abstract Heart (Cardiology)
+        const HeartModel = ({ hovered, scale = 1 }) => {
+            const meshRef = useRef();
+            
+            useFrame((state, delta) => {
+                // Heartbeat / Bobbing
+                const t = state.clock.getElapsedTime();
+                if(meshRef.current) {
+                    meshRef.current.position.y = Math.sin(t * 1.5) * 0.1;
+                    
+                    // Spin on hover
+                    if (hovered) {
+                        meshRef.current.rotation.y += delta * 2;
+                    } else {
+                        meshRef.current.rotation.y += delta * 0.2;
+                    }
+                }
+            });
+
+            return (
+                <group scale={scale}>
+                    <mesh ref={meshRef}>
+                        {/* Icosahedron looks like a stylized digital heart */}
+                        <icosahedronGeometry args={[1.2, 0]} />
+                        <MeshDistortMaterial 
+                            color="#ef4444" 
+                            emissive="#7f1d1d"
+                            roughness={0.1}
+                            metalness={0.8}
+                            distort={0.4}
+                            speed={2}
+                        />
+                    </mesh>
+                    {hovered && <Sparkles count={20} scale={3} size={2} speed={0.4} opacity={0.5} color="#fca5a5" />}
+                </group>
+            );
+        };
+
+        // 2. Abstract Brain (Neurology)
+        const BrainModel = ({ hovered, scale = 1 }) => {
+            const meshRef = useRef();
+
+            useFrame((state, delta) => {
+                const t = state.clock.getElapsedTime();
+                if(meshRef.current) {
+                    meshRef.current.position.y = Math.sin(t) * 0.1;
+                    
+                    if (hovered) {
+                        meshRef.current.rotation.x += delta;
+                        meshRef.current.rotation.y += delta;
+                    } else {
+                        meshRef.current.rotation.x += delta * 0.1;
+                        meshRef.current.rotation.y += delta * 0.15;
+                    }
+                }
+            });
+
+            return (
+                <group scale={scale}>
+                    <mesh ref={meshRef}>
+                        {/* TorusKnot looks like complex neural folds */}
+                        <torusKnotGeometry args={[0.8, 0.25, 100, 16]} />
+                        <meshPhysicalMaterial 
+                            color="#d946ef" 
+                            roughness={0.2}
+                            metalness={0.9}
+                            clearcoat={1}
+                            clearcoatRoughness={0.1}
+                            wireframe={false}
+                        />
+                    </mesh>
+                     {hovered && <Sparkles count={30} scale={3.5} size={1.5} speed={0.8} opacity={0.6} color="#e879f9" />}
+                </group>
+            );
+        };
+
+        // 3. Abstract Bone (Orthopaedics)
+        const BoneModel = ({ hovered, scale = 1 }) => {
+            const meshRef = useRef();
+
+            useFrame((state, delta) => {
+                const t = state.clock.getElapsedTime();
+                if(meshRef.current) {
+                    meshRef.current.rotation.z = Math.sin(t * 0.5) * 0.1; // Sway
+                    
+                    if (hovered) {
+                        meshRef.current.rotation.y += delta * 2;
+                    }
+                }
+            });
+
+            return (
+                <group scale={scale} ref={meshRef}>
+                    {/* Main Shaft */}
+                    <mesh position={[0, 0, 0]}>
+                        <cylinderGeometry args={[0.3, 0.3, 2, 32]} />
+                        <meshStandardMaterial color="#f8fafc" roughness={0.3} metalness={0.2} />
+                    </mesh>
+                    {/* Joints */}
+                    <mesh position={[0, 1, 0]}>
+                        <sphereGeometry args={[0.5, 32, 32]} />
+                        <meshStandardMaterial color="#f1f5f9" roughness={0.3} metalness={0.2} />
+                    </mesh>
+                    <mesh position={[0, -1, 0]}>
+                        <sphereGeometry args={[0.5, 32, 32]} />
+                        <meshStandardMaterial color="#f1f5f9" roughness={0.3} metalness={0.2} />
+                    </mesh>
+                    {hovered && <Sparkles count={15} scale={3} size={2} speed={0.2} opacity={0.3} color="#ffffff" />}
+                </group>
+            );
+        };
+
+        // 4. Abstract Lungs (Pulmonology) - Alveoli Clusters
+        const LungModel = ({ hovered, scale = 1 }) => {
+            const groupRef = useRef();
+
+            const alveoli = useMemo(() => {
+                const points = [];
+                const createCluster = (offsetX) => {
+                    for(let i=0; i<30; i++) {
+                        const theta = Math.random() * 2 * Math.PI;
+                        const phi = Math.acos(2 * Math.random() - 1);
+                        const r = 0.45 * Math.cbrt(Math.random());
+                        points.push({
+                            pos: [
+                                r * Math.sin(phi) * Math.cos(theta) + offsetX,
+                                r * Math.sin(phi) * Math.sin(theta) + 0.1,
+                                r * Math.cos(phi)
+                            ],
+                            scale: Math.random() * 0.12 + 0.06
+                        });
+                    }
+                };
+                createCluster(-0.55); 
+                createCluster(0.55); 
+                return points;
+            }, []);
+
+            useFrame((state, delta) => {
+                const t = state.clock.getElapsedTime();
+                const breath = 1 + Math.sin(t * 2) * 0.08;
+                if (groupRef.current) {
+                    groupRef.current.scale.set(breath, breath, breath);
+                    
+                    if (hovered) {
+                        groupRef.current.rotation.y += delta * 1.5;
+                    } else {
+                        groupRef.current.rotation.y = Math.sin(t * 0.5) * 0.05;
+                    }
+                }
+            });
+
+            return (
+                <group ref={groupRef}>
+                    <group scale={scale}>
+                        {alveoli.map((data, i) => (
+                            <mesh key={i} position={data.pos} scale={data.scale}>
+                                <sphereGeometry args={[1, 16, 16]} />
+                                <meshPhysicalMaterial 
+                                    color="#06b6d4" // Bright cyan for light mode
+                                    transmission={0.6} 
+                                    thickness={0.8} 
+                                    roughness={0.1} 
+                                    ior={1.4}
+                                />
+                            </mesh>
+                        ))}
+                         <mesh position={[0, 0.8, 0]}>
+                            <cylinderGeometry args={[0.12, 0.12, 0.4, 12]} />
+                            <meshStandardMaterial color="#0891b2" roughness={0.4} />
+                        </mesh>
+                    </group>
+                    {hovered && <Sparkles count={40} scale={4} size={3} speed={0.2} opacity={0.4} color="#67e8f9" />}
+                </group>
+            );
+        };
+
+        const SceneContainer = ({ type, hovered, scale = 1 }) => {
+            return (
+                <Canvas camera={{ position: [0, 0, 4], fov: 50 }}>
+                    <ambientLight intensity={0.5} />
+                    <pointLight position={[10, 10, 10]} intensity={1} />
+                    <pointLight position={[-10, -10, -10]} color="blue" intensity={0.5} />
+                    <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5}>
+                        {type === 'cardio' && <HeartModel hovered={hovered} scale={scale} />}
+                        {type === 'neuro' && <BrainModel hovered={hovered} scale={scale} />}
+                        {type === 'ortho' && <BoneModel hovered={hovered} scale={scale} />}
+                        {type === 'pulmo' && <LungModel hovered={hovered} scale={scale} />}
+                    </Float>
+                    <Environment preset="city" />
+                </Canvas>
+            );
+        };
+
+        // --- UI COMPONENTS ---
+
+        const Card = ({ title, type, onClick }) => {
+            const [hovered, setHovered] = useState(false);
+
+            return (
+                <motion.div 
+                    className="relative h-96 w-full rounded-3xl bg-white/40 backdrop-blur-xl border border-white/50 shadow-xl overflow-hidden cursor-pointer group"
+                    whileHover={{ scale: 1.02, y: -5 }}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4 }}
+                    onMouseEnter={() => setHovered(true)}
+                    onMouseLeave={() => setHovered(false)}
+                    onClick={() => onClick(type)}
+                >
+                    {/* Background Gradient Glow */}
+                    <div className={`absolute inset-0 opacity-0 group-hover:opacity-20 transition-opacity duration-700 bg-gradient-to-tr ${
+                        type === 'cardio' ? 'from-red-400 to-transparent' :
+                        type === 'neuro' ? 'from-purple-400 to-transparent' :
+                        type === 'ortho' ? 'from-slate-400 to-transparent' :
+                        'from-cyan-400 to-transparent'
+                    }`} />
+
+                    {/* 3D Scene */}
+                    <div className="absolute inset-0 z-10 h-3/4">
+                        <SceneContainer type={type} hovered={hovered} />
+                    </div>
+
+                    {/* Content */}
+                    <div className="absolute bottom-0 w-full p-6 z-20 bg-gradient-to-t from-white/90 via-white/50 to-transparent">
+                        <div className="flex items-center gap-2 mb-2">
+                             <div className={`w-2 h-2 rounded-full ${
+                                 type === 'cardio' ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' :
+                                 type === 'neuro' ? 'bg-purple-500 shadow-[0_0_10px_rgba(217,70,239,0.8)]' :
+                                 type === 'ortho' ? 'bg-slate-500 shadow-[0_0_10px_rgba(100,116,139,0.8)]' :
+                                 'bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.8)]'
+                             }`} />
+                             <span className="text-xs font-semibold tracking-widest text-slate-500 uppercase">Simulation Ready</span>
+                        </div>
+                        <h3 className="text-2xl font-bold text-slate-800">{title}</h3>
+                        <p className="text-slate-500 text-sm mt-1">Initialize digital twin instance</p>
+                    </div>
+                </motion.div>
+            );
+        };
+
+        const LoadingScreen = ({ type }) => {
+            return (
+                <motion.div 
+                    className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                >
+                    {/* Large, borderless container for seamless blending */}
+                    <div className="w-[800px] h-[600px]">
+                         {/* We pass hovered={true} to make it spin fast during loading. Scale adjusted. */}
+                        <SceneContainer type={type} hovered={true} scale={0.8} />
+                    </div>
+                    <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.5 }}
+                        className="text-center -mt-10 relative z-10"
+                    >
+                        <h2 className="text-3xl font-light text-slate-800 tracking-tight">Initializing {
+                            type === 'cardio' ? 'Cardiology' :
+                            type === 'neuro' ? 'Neurology' :
+                            type === 'ortho' ? 'Orthopaedics' : 'Pulmonology'
+                        } Core</h2>
+                        <div className="mt-8 h-1 w-64 bg-slate-200 rounded-full overflow-hidden mx-auto">
+                            <motion.div 
+                                className={`h-full ${
+                                    type === 'cardio' ? 'bg-red-500' :
+                                    type === 'neuro' ? 'bg-purple-500' :
+                                    type === 'ortho' ? 'bg-slate-500' : 'bg-cyan-500'
+                                }`}
+                                initial={{ width: "0%" }}
+                                animate={{ width: "100%" }}
+                                transition={{ duration: 2, ease: "easeInOut" }}
+                            />
+                        </div>
+                        <p className="mt-4 text-slate-400 font-mono text-xs tracking-widest">LOADING EHR DATA PATTERNS...</p>
+                    </motion.div>
+                </motion.div>
+            );
+        };
+
+        const SimulationPage = ({ type, onBack }) => {
+            const config = {
+                cardio: { color: 'text-red-500', title: 'Cardiology Simulation', icon: Activity },
+                neuro: { color: 'text-purple-500', title: 'Neurology Simulation', icon: Brain },
+                ortho: { color: 'text-slate-600', title: 'Orthopaedics Simulation', icon: Bone },
+                pulmo: { color: 'text-cyan-500', title: 'Pulmonology Simulation', icon: Wind },
+            }[type];
+
+            const Icon = config.icon;
+
+            return (
+                <motion.div 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    className="min-h-screen p-8 bg-slate-50"
+                >
+                    <button 
+                        onClick={onBack}
+                        className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors mb-8"
+                    >
+                        <ArrowLeft size={20} /> Back to Dashboard
+                    </button>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* Main Viewport */}
+                        <div className="lg:col-span-2 h-[600px] bg-black rounded-3xl overflow-hidden relative border border-slate-200 shadow-2xl">
+                             <div className="absolute top-4 left-4 z-10 bg-black/50 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-white text-sm font-mono flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                LIVE TWIN RUNTIME
+                             </div>
+                             <SceneContainer type={type} hovered={false} scale={1.2} />
+                             
+                             {/* Faux HUD Elements */}
+                             <div className="absolute bottom-8 left-8 right-8 flex justify-between text-white/70 font-mono text-xs">
+                                <div>
+                                    <p>BPM: 72</p>
+                                    <p>O2: 98%</p>
+                                </div>
+                                <div className="text-right">
+                                    <p>MESH: POLY_HIGH</p>
+                                    <p>RENDER: WEBGL_2</p>
+                                </div>
+                             </div>
+                        </div>
+
+                        {/* Data Panel */}
+                        <div className="space-y-6">
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className={`p-3 rounded-xl bg-slate-50 ${config.color}`}>
+                                        <Icon size={24} />
+                                    </div>
+                                    <div>
+                                        <h1 className="text-xl font-bold text-slate-800">{config.title}</h1>
+                                        <p className="text-xs text-slate-400">ID: #884-29-AX</p>
+                                    </div>
+                                </div>
+                                <hr className="border-slate-100 my-4"/>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-500">Status</span>
+                                        <span className="text-green-500 font-medium">Stable</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-500">Last Scan</span>
+                                        <span className="text-slate-800">2 mins ago</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-500">Anomaly Score</span>
+                                        <span className="text-slate-800">0.02% (Low)</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                <h3 className="font-semibold text-slate-700 mb-4">Parameters</h3>
+                                <div className="space-y-4">
+                                    {[1,2,3].map(i => (
+                                        <div key={i}>
+                                            <div className="flex justify-between text-xs text-slate-500 mb-1">
+                                                <span>Variable {i}</span>
+                                                <span>{50 + i * 10}%</span>
+                                            </div>
+                                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                <div className="h-full bg-slate-800 w-1/2 rounded-full" style={{width: `${50 + i * 10}%`}} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            );
+        }
+
+        const EHRUpload = () => {
+            const [isDragging, setIsDragging] = useState(false);
+
+            return (
+                <div 
+                    className={`relative w-full p-8 rounded-3xl border-2 border-dashed transition-all duration-300 ${
+                        isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-white/50 hover:border-blue-400'
+                    }`}
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => { e.preventDefault(); setIsDragging(false); }}
+                >
+                    <div className="flex flex-col items-center justify-center text-center gap-4">
+                        <div className={`p-4 rounded-full ${isDragging ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
+                            <Upload size={32} />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-semibold text-slate-700">Upload Electronic Health Record</h3>
+                            <p className="text-slate-500 text-sm mt-1">Drag and drop .xml, .json or .dcm files here to initialize twin</p>
+                        </div>
+                        <button className="px-6 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-700 transition-colors">
+                            Select Files
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [view, setView] = useState('home'); // home, cardio, neuro, ortho, pulmo
+            const [isLoading, setIsLoading] = useState(false);
+            const [loadingTarget, setLoadingTarget] = useState(null);
+
+            const handleNavigation = (target) => {
+                setLoadingTarget(target);
+                setIsLoading(true);
+                
+                // Simulate loading delay
+                setTimeout(() => {
+                    setView(target);
+                    setIsLoading(false);
+                    setLoadingTarget(null);
+                }, 2500);
+            };
+
+            return (
+                <div className="min-h-screen text-slate-900 bg-gradient-to-br from-slate-50 via-slate-100 to-white selection:bg-blue-100">
+                    <AnimatePresence mode="wait">
+                        {isLoading && <LoadingScreen type={loadingTarget} />}
+                    </AnimatePresence>
+
+                    {view === 'home' ? (
+                        <div className="max-w-7xl mx-auto px-6 py-12">
+                            {/* Header */}
+                            <header className="flex justify-between items-center mb-16">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-cyan-400 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-500/30">
+                                        B
+                                    </div>
+                                    <span className="text-2xl font-bold tracking-tight text-slate-800">BioTwin <span className="font-light text-slate-400">OS</span></span>
+                                </div>
+                                <div className="flex gap-6 text-sm font-medium text-slate-500">
+                                    <span className="cursor-pointer hover:text-slate-800">Documentation</span>
+                                    <span className="cursor-pointer hover:text-slate-800">Support</span>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                        <span>System Online</span>
+                                    </div>
+                                </div>
+                            </header>
+
+                            {/* Hero / Upload */}
+                            <motion.section 
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="mb-16"
+                            >
+                                <div className="text-center mb-10">
+                                    <h1 className="text-5xl md:text-6xl font-bold text-slate-800 tracking-tight mb-4">
+                                        Medical <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-500">Digital Twin</span> Interface
+                                    </h1>
+                                    <p className="text-xl text-slate-500 max-w-2xl mx-auto">
+                                        Upload patient EHR data to generate real-time physiological simulations using high-fidelity rendering engines.
+                                    </p>
+                                </div>
+                                <div className="max-w-2xl mx-auto">
+                                    <EHRUpload />
+                                </div>
+                            </motion.section>
+
+                            {/* Simulation Cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <Card title="Cardiology" type="cardio" onClick={handleNavigation} />
+                                <Card title="Neurology" type="neuro" onClick={handleNavigation} />
+                                <Card title="Orthopaedics" type="ortho" onClick={handleNavigation} />
+                                <Card title="Pulmonology" type="pulmo" onClick={handleNavigation} />
+                            </div>
+                        </div>
+                    ) : (
+                        <SimulationPage type={view} onBack={() => setView('home')} />
+                    )}
+                </div>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

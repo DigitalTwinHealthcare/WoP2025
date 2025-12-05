@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Pill - Digital Twin</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #080808;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Scene Setup
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x080808); // Dark background like the reference
+        scene.fog = new THREE.FogExp2(0x080808, 0.02);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0, 18);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.enableZoom = false;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 1.0;
+
+        // --- Particle Pill Generation ---
+
+        const particleCount = 6000; // High density for "cloud" look
+        const geometry = new THREE.BufferGeometry();
+        const positions = [];
+        const colors = [];
+        const sizes = [];
+        const originalPositions = []; // To remember where they should be for "breathing"
+
+        const color1 = new THREE.Color(0x00aaff); // Blue
+        const color2 = new THREE.Color(0xffaa00); // Orange/Gold (Warm)
+
+        // Capsule parameters
+        const radius = 2.0;
+        const length = 3.0; // Cylinder length
+        const halfLength = length / 2;
+
+        for (let i = 0; i < particleCount; i++) {
+            // Random point inside capsule volume
+            // Rejection sampling is easiest for uniform distribution
+            let x, y, z;
+            let valid = false;
+
+            while (!valid) {
+                x = (Math.random() - 0.5) * 2 * radius;
+                y = (Math.random() - 0.5) * (length + 2 * radius);
+                z = (Math.random() - 0.5) * 2 * radius;
+
+                // Check if inside capsule
+                // 1. Check if in cylinder part
+                if (y >= -halfLength && y <= halfLength) {
+                    if (x * x + z * z <= radius * radius) valid = true;
+                }
+                // 2. Check top hemisphere
+                else if (y > halfLength) {
+                    const dy = y - halfLength;
+                    if (x * x + dy * dy + z * z <= radius * radius) valid = true;
+                }
+                // 3. Check bottom hemisphere
+                else if (y < -halfLength) {
+                    const dy = y + halfLength; // dy is negative
+                    if (x * x + dy * dy + z * z <= radius * radius) valid = true;
+                }
+            }
+
+            // Push position
+            positions.push(x, y, z);
+            originalPositions.push(x, y, z);
+
+            // Color based on X or Y split. 
+            // Reference image shows left/right split (or top/bottom depending on orientation).
+            // Let's do a soft gradient split along X axis for that "two halves" look.
+
+            const mixFactor = (x / radius + 1) / 2; // 0 to 1
+            // Add some noise to the mix for "dithering" look
+            const noise = (Math.random() - 0.5) * 0.2;
+            const finalMix = Math.max(0, Math.min(1, mixFactor + noise));
+
+            // Sharp transition? Or smooth? Reference looks somewhat distinct but with particle overlap.
+            // Let's do a sharper transition at 0.5
+            const c = (finalMix > 0.5) ? color2 : color1;
+
+            colors.push(c.r, c.g, c.b);
+
+            // Random sizes
+            sizes.push(Math.random() * 0.15 + 0.05);
+        }
+
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+
+        // Material
+        // Using a texture for soft particles would be nice, but simple squares/circles work too.
+        // Let's use a generated canvas texture for soft glow.
+        function getTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            const context = canvas.getContext('2d');
+            const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(1, 'rgba(255,255,255,0)');
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, 32, 32);
+            const texture = new THREE.CanvasTexture(canvas);
+            return texture;
+        }
+
+        const material = new THREE.PointsMaterial({
+            size: 0.2,
+            vertexColors: true,
+            map: getTexture(),
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            transparent: true,
+            opacity: 0.8,
+            sizeAttenuation: true
+        });
+
+        const particleSystem = new THREE.Points(geometry, material);
+        scene.add(particleSystem);
+
+        // Add some "stray" particles floating around
+        const strayCount = 200;
+        const strayGeo = new THREE.BufferGeometry();
+        const strayPos = [];
+        for (let i = 0; i < strayCount; i++) {
+            strayPos.push((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
+        }
+        strayGeo.setAttribute('position', new THREE.Float32BufferAttribute(strayPos, 3));
+        const strayMat = new THREE.PointsMaterial({
+            color: 0x00ffff,
+            size: 0.1,
+            transparent: true,
+            opacity: 0.4,
+            blending: THREE.AdditiveBlending
+        });
+        const straySystem = new THREE.Points(strayGeo, strayMat);
+        scene.add(straySystem);
+
+
+        // --- Animation ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+
+            controls.update();
+
+            // Breathe / Pulse Effect
+            const positions = particleSystem.geometry.attributes.position.array;
+
+            for (let i = 0; i < particleCount; i++) {
+                const ix = i * 3;
+                const ox = originalPositions[ix];
+                const oy = originalPositions[ix + 1];
+                const oz = originalPositions[ix + 2];
+
+                // Simple noise-like movement
+                // Move slightly based on position and time
+                const movement = Math.sin(time * 2 + ox * 0.5 + oy * 0.3) * 0.05;
+                const pulse = 1 + Math.sin(time * 1.5) * 0.02; // Overall scale pulse
+
+                positions[ix] = ox * pulse + Math.sin(time * 3 + oy) * 0.02;
+                positions[ix + 1] = oy * pulse + Math.cos(time * 2 + ox) * 0.02;
+                positions[ix + 2] = oz * pulse + Math.sin(time * 3 + oz) * 0.02;
+            }
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+
+            // Rotate stray particles
+            straySystem.rotation.y = time * 0.1;
+            straySystem.rotation.x = time * 0.05;
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+
+</html>

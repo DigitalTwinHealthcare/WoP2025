@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CT/MRI Machine Icon</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: transparent;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: sans-serif;
+        }
+
+        #icon-container {
+            width: 500px;
+            height: 500px;
+            position: relative;
+        }
+
+        /* Tech-style background glow */
+        #icon-container::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 60%;
+            height: 60%;
+            background: radial-gradient(circle, rgba(0, 255, 255, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+            transform: translate(-50%, -50%);
+            z-index: -1;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="icon-container"></div>
+
+    <script type="module">
+        import * as THREE from 'https://cdn.skypack.dev/three@0.128.0';
+
+        // --- Configuration ---
+        const PRIMARY_COLOR = 0xf0f0f0; // White/Clean plastic
+        const ACCENT_COLOR = 0x00aaff;  // Medical Blue
+        const DARK_ACCENT = 0x333333;   // Dark Grey parts
+
+        let scene, camera, renderer;
+        let scannerGroup, innerRing, bed;
+        let time = 0;
+
+        init();
+        animate();
+
+        function init() {
+            const container = document.getElementById('icon-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // 1. Setup
+            scene = new THREE.Scene();
+            // Isometric-ish view
+            camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+            camera.position.set(6, 4.5, 9);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true; // Enable shadows for depth
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // 2. Create Machine
+            createScanner();
+
+            // 3. Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(5, 10, 7);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            scene.add(dirLight);
+
+            // Blue glow from inside the machine
+            const boreLight = new THREE.PointLight(0x00ffff, 1.5, 4);
+            boreLight.position.set(0, 0, 0);
+            scene.add(boreLight);
+
+            // Resize Handler
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createScanner() {
+            scannerGroup = new THREE.Group();
+
+            // Materials
+            const plasticMat = new THREE.MeshStandardMaterial({
+                color: PRIMARY_COLOR,
+                roughness: 0.3,
+                metalness: 0.1
+            });
+
+            const darkMat = new THREE.MeshStandardMaterial({
+                color: DARK_ACCENT,
+                roughness: 0.7
+            });
+
+            const glowingMat = new THREE.MeshBasicMaterial({
+                color: ACCENT_COLOR
+            });
+
+            // --- A. The Gantry (The big donut) ---
+
+            // Outer Housing (Box with hole approximation)
+            // We use a cylinder for the main ring shape
+            const outerCylinderGeo = new THREE.CylinderGeometry(1.6, 1.6, 0.8, 32);
+            // Rotate to face correct way
+            outerCylinderGeo.rotateX(Math.PI / 2);
+
+            const gantryHousing = new THREE.Mesh(outerCylinderGeo, plasticMat);
+            gantryHousing.castShadow = true;
+            gantryHousing.receiveShadow = true;
+            scannerGroup.add(gantryHousing);
+
+            // The Bore (Inner hole - dark inside)
+            const innerCylinderGeo = new THREE.CylinderGeometry(1.0, 1.0, 0.81, 32);
+            innerCylinderGeo.rotateX(Math.PI / 2);
+            // We need to render the *inside* of this cylinder to simulate the hole
+            const boreMat = new THREE.MeshStandardMaterial({ color: 0x111111, side: THREE.BackSide });
+            const bore = new THREE.Mesh(innerCylinderGeo, boreMat);
+            scannerGroup.add(bore);
+
+            // --- B. The Inner Rotating Ring (X-Ray/Magnet components) ---
+            // This sits slightly inside the bore and spins
+            innerRing = new THREE.Group();
+
+            // A thin ring with "lights"
+            const ringGeo = new THREE.TorusGeometry(0.95, 0.05, 16, 50);
+            const ringMesh = new THREE.Mesh(ringGeo, glowingMat);
+            innerRing.add(ringMesh);
+
+            // Add some "sensor" boxes to the ring to make rotation visible
+            for (let i = 0; i < 4; i++) {
+                const sensor = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.2, 0.2, 0.2),
+                    glowingMat
+                );
+                const angle = (i / 4) * Math.PI * 2;
+                sensor.position.x = Math.cos(angle) * 0.95;
+                sensor.position.y = Math.sin(angle) * 0.95;
+                sensor.rotation.z = angle;
+                innerRing.add(sensor);
+            }
+            scannerGroup.add(innerRing);
+
+
+            // --- C. The Base (Stands on the floor) ---
+            const baseGeo = new THREE.BoxGeometry(1.8, 1.5, 0.8);
+            const base = new THREE.Mesh(baseGeo, plasticMat);
+            base.position.y = -1.6; // Move down
+            base.castShadow = true;
+            base.receiveShadow = true;
+
+            // Chamfer/Detailing on base (Side panels)
+            const sidePanel = new THREE.Mesh(
+                new THREE.BoxGeometry(1.9, 0.5, 0.6),
+                darkMat
+            );
+            sidePanel.position.y = -0.5; // Relative to base center
+            base.add(sidePanel);
+
+            scannerGroup.add(base);
+
+
+            // --- D. The Patient Table ---
+            bed = new THREE.Group();
+
+            // Table support
+            const supportGeo = new THREE.BoxGeometry(0.4, 1.0, 0.4);
+            const support = new THREE.Mesh(supportGeo, darkMat);
+            support.position.set(0, -1.0, 1.5); // In front of gantry
+            bed.add(support);
+
+            // The Table Top (Slides in/out)
+            const tableTopGeo = new THREE.BoxGeometry(0.7, 0.1, 2.5);
+            const tableTop = new THREE.Mesh(tableTopGeo, plasticMat);
+            tableTop.position.set(0, -0.5, 1.5);
+            tableTop.castShadow = true;
+            bed.add(tableTop);
+
+            // Mattress
+            const mattressGeo = new THREE.BoxGeometry(0.6, 0.05, 2.4);
+            const mattress = new THREE.Mesh(mattressGeo, new THREE.MeshStandardMaterial({ color: 0x44aaff }));
+            mattress.position.set(0, -0.42, 1.5);
+            bed.add(mattress);
+
+            scannerGroup.add(bed);
+
+            // Adjust whole group position
+            scannerGroup.position.y = 0.5;
+
+            scene.add(scannerGroup);
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('icon-container');
+            if (!container) return;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            time += 0.01;
+
+            // 1. Rotate the whole machine slowly (Turntable view)
+            scannerGroup.rotation.y = Math.sin(time * 0.5) * 0.2; // Gentle sway
+
+            // 2. Spin the internal scanner ring (Fast)
+            innerRing.rotation.z -= 0.15;
+
+            // 3. Slide the bed in and out smoothly
+            // Moves Z from roughly 0.2 (inside) to 1.5 (outside)
+            const bedZ = 0.8 + Math.sin(time * 1.5) * 0.6;
+            bed.children[1].position.z = 1.0 + bedZ; // Move Table Top
+            bed.children[2].position.z = 1.0 + bedZ; // Move Mattress
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+
+</html>
