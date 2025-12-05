@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 from sqlmodel import Session, select
+import dataclasses
 
 from app.db.db import get_session
 from app.db.models import Simulation, Patient, Report
@@ -256,7 +257,24 @@ async def export_report(
 
 # ---------------------------------------------
 
-@router.post("/simulate", response_model=Simulation)
+# ---------------------------------------------
+
+def make_serializable(obj):
+    if dataclasses.is_dataclass(obj):
+        return {k: make_serializable(v) for k, v in dataclasses.asdict(obj).items()}
+    elif isinstance(obj, dict):
+        return {k: make_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_serializable(v) for v in obj]
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.float64, np.float32)):
+        return float(obj)
+    return obj
+
+@router.post("/simulate")
 def run_simulation(req: SimulationRequest, session: Session = Depends(get_session)):
     if DigitalTwinOrchestrator is None:
         raise HTTPException(status_code=500, detail="Orchestrator module not loaded. Check dependencies.")
@@ -388,4 +406,7 @@ def run_simulation(req: SimulationRequest, session: Session = Depends(get_sessio
             except Exception:
                 pass
             
-    return simulation
+    return {
+        "simulation": simulation,
+        "raw_data": make_serializable(results)
+    }
