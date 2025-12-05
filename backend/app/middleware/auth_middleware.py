@@ -75,9 +75,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable):
         path = request.url.path
         print(f"[AUTH] Incoming path: {path}")
-        # allow exempt paths ONLY for login/register
-        if path in self.exempt_paths or path in ["/auth/login", "/auth/register"]:
-            print("[AUTH] Exempt path, skipping auth")
+        
+        # Allow static files, exempt paths, and health check without authentication
+        if (path.startswith("/static/") or 
+            path in self.exempt_paths or 
+            path in ["/auth/login", "/auth/register"] or
+            path == "/health"):
             return await call_next(request)
 
         # Allow OPTIONS requests (CORS preflight)

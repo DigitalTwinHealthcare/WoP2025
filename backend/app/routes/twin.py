@@ -259,26 +259,57 @@ async def export_report(
 
 # ---------------------------------------------
 
+import numpy as np
+
 def make_serializable(obj):
-    if dataclasses.is_dataclass(obj):
-        return {k: make_serializable(v) for k, v in dataclasses.asdict(obj).items()}
-    elif isinstance(obj, dict):
-        return {k: make_serializable(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [make_serializable(v) for v in obj]
-    elif isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, (np.int64, np.int32)):
+    """Recursively convert numpy types to native Python types for JSON serialization."""
+    import numpy as np
+    import pandas as pd
+    from datetime import datetime, date
+
+    # Handle None
+    if obj is None:
+        return None
+        
+    # Handle numpy types
+    if isinstance(obj, (np.integer, np.int8, np.int16, np.int32, np.int64)):
         return int(obj)
-    elif isinstance(obj, (np.float64, np.float32)):
+    elif isinstance(obj, (np.floating, np.float16, np.float32, np.float64)):
         return float(obj)
-    return obj
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return [make_serializable(x) for x in obj.tolist()]
+    elif isinstance(obj, np.bytes_):
+        return obj.decode('utf-8')
+    elif isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    # Handle pandas types
+    elif hasattr(obj, 'to_dict'):
+        return make_serializable(obj.to_dict())
+    # Handle dictionaries
+    elif isinstance(obj, dict):
+        return {str(k): make_serializable(v) for k, v in obj.items()}
+    # Handle lists, tuples, sets
+    elif isinstance(obj, (list, tuple, set)):
+        return [make_serializable(x) for x in obj]
+    # Handle objects with __dict__
+    elif hasattr(obj, '__dict__'):
+        return make_serializable(obj.__dict__)
+    # Handle other types
+    elif isinstance(obj, (str, int, float, bool)):
+        return obj
+    # Last resort: convert to string
+    else:
+        try:
+            return str(obj)
+        except Exception:
+            return None
 
 @router.post("/simulate")
 def run_simulation(req: SimulationRequest, session: Session = Depends(get_session)):
     if DigitalTwinOrchestrator is None:
         raise HTTPException(status_code=500, detail="Orchestrator module not loaded. Check dependencies.")
-
     # 1. Verify patient
     patient = session.get(Patient, req.patient_id)
     if not patient:
