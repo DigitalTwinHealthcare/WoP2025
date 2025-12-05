@@ -1,0 +1,34 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# Environment config
+python-dotenv==1.0.1
+pydantic==2.9.2
+pydantic-settings==2.6.1
+
+# Firebase Authentication only
+firebase-admin==6.6.0
+
+# File uploads + static serving
+python-multipart==0.0.9
+aiofiles==24.1.0
+
+# FHIR bundle generation
+fhir.resources==8.1.0
+
+# ML preprocessors
+numpy==2.3.5
+pandas==2.2.3
+
+# SQLite ORM
+sqlmodel==0.0.21
+sqlalchemy==2.0.36
+
+# Optional but recommended for SQLite performance
+aiosqlite==0.19.0
+
+# Mechanics dependencies
+scipy
+matplotlib
+reportlab
+nibabel

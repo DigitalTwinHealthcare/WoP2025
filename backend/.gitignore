@@ -1,0 +1,19 @@
+
+# Virtual Env
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+
+# Environment & Credentials
+.env
+credentials/
+
+# Data
+data/
+
+# OS
+.DS_Store
+Thumbs.db

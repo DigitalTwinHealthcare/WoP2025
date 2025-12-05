@@ -1,0 +1,16 @@
+
+# Virtual Env
+bin/
+lib/
+include/
+share/
+pyvenv.cfg
+venv/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
